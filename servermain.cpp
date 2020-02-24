@@ -49,21 +49,18 @@ void error(char const * msg)
 
 int main(int argc, char *argv[])
 {
+	if(argc < 2)
+	{
+		error("error, arguments are missing");
+	}
+	unsigned int SERVER_PORT = atoi(argv[1]);
+
 	int sockfd;
 	struct sockaddr_in serverAddr;
 	struct sockaddr_in clientAddr;
 
 	char sendBuff[256];
 	char recvBuff[256];
-
-	unsigned int SERVER_PORT;
-
-	if(argc < 2)
-	{
-		error("error, arguments are missing");
-	}
-	SERVER_PORT = atoi(argv[1]);
-
 
 	if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 	{
