@@ -32,10 +32,11 @@ int main(int argc, char *argv[])
 
 
 	// Variables.
-	int sockfd;
+	int sockfd, tempInt;
 	struct sockaddr_in serverAddr;
 	char * packet = "Greetings, from client.";
 	char buffer[MAXLINE];
+
 
 	// Creating socket file descriptor
   	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -46,18 +47,21 @@ int main(int argc, char *argv[])
 	printf("Socket was created, with file descriptor: %d\n", sockfd);
 
 
-	memset(&serverAddr, '\0', sizeof(serverAddr));
 
 	// Socket address information needed for binding.
+	memset(&serverAddr, '\0', sizeof(serverAddr));
 	serverAddr.sin_family = AF_INET;
 	serverAddr.sin_port = htons(SERVER_PORT);		// Convert to network standard order.
 	serverAddr.sin_addr.s_addr = INADDR_ANY;
   
 	
 	// Send message.
-	sendto(sockfd, (const char *)packet, strlen(packet), 
+	tempInt = sendto(sockfd, (const char *)packet, strlen(packet), 
 		0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
-	
+	if (tempint < 0) 
+	{
+		error("sendto() sent a different number of bytes than expected.\n");
+    }
 	printf("[%s] sent to server.\n", packet);
 
 

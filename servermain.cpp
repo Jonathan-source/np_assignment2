@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 	printf("Setting up server...\n");
 
 
-	// Filling server information
+	// Fill the server address structure.
 	memset(&serverAddr, 0, sizeof(serverAddr));  		
 
 	serverAddr.sin_family = AF_INET;
@@ -150,8 +150,6 @@ int main(int argc, char *argv[])
 	  	// Print message.
 	  	printf("\nReceived a message from client %s:%d\n", clientIP, clientAddr.sin_port);
 	  	printf("[%s:%d]: %s\n\n", clientIP, clientAddr.sin_port, recvBuff);
-
-
 
 
 
