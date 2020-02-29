@@ -1,85 +1,123 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/types.h> 		
 #include <sys/socket.h>		 
 #include <netinet/in.h>	
-
+#include <signal.h>
 #include <unistd.h>
-/* You will to add includes here */
-// Included to get the support library
+#include <sys/time.h>
+
 #include <calcLib.h>
+#include "protocol.h"
 
 #define MAXLINE 1024
 
+int loopCount = 0;
+bool isRunning = true;
 
-#include "protocol.h"
-void error(char const * msg)
-{
-	perror(msg);
-	exit(EXIT_FAILURE);
+
+/* Call back function, will be called when the SIGALRM is raised when the timer expires. */
+void checkJobbList(int signum)
+{ 
+  printf("Timeout [%d]", loopCount);
+  if(loopCount == 2){
+    isRunning = false;
+  } 
+  loopCount++;
+  return;   /* An interrupter */
 }
 
+
+
 int main(int argc, char *argv[])
-{	
-	// Check correct arguments.
-	if(argc < 2)
-	{
-		error("error, arguments are missing.");
-	}
-	unsigned int SERVER_PORT = atoi(argv[1]);
+{
+// VARIABLES  
+//=====================================================================================================
 
+  int currentState = 1;
 
-	// Variables.
-	int sockfd, tempInt;
-	struct sockaddr_in serverAddr;
-	char * packet = "Greetings, from client.";
-	char buffer[MAXLINE];
+  int sockfd;
+  int portno = atoi(argv[1]);
+  int byteRcvd = 0;
+  int byteSent = 0;
+  char *buffer[MAXLINE];
 
+  sockaddr_in servAddr;
+  socklen_t serverLen = sizeof(servAddr);
 
-	// Creating socket file descriptor
-  	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-  	if(sockfd < 0)
-	{
-		error("could not create socket.");
-	}
-	printf("Socket was created, with file descriptor: %d\n", sockfd);
+  calcMessage dataPacket;
 
 
 
-	// Socket address information needed for binding.
-	memset(&serverAddr, '\0', sizeof(serverAddr));
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(SERVER_PORT);		// Convert to network standard order.
-	serverAddr.sin_addr.s_addr = INADDR_ANY;
-  
-	
-	// Send message.
-	tempInt = sendto(sockfd, (const char *)packet, strlen(packet), 
-		0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
-	if (tempint < 0) 
-	{
-		error("sendto() sent a different number of bytes than expected.\n");
-    }
-	printf("[%s] sent to server.\n", packet);
+// UDP SOCKET
+//=====================================================================================================
+
+  /* Create an UDP socket. */
+  sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  if(sockfd < 0) 
+  {
+	  perror("cannot create socket");
+  }
+  printf("[+] Socket was created.\n");
+
+  /* Fill in the server's address and data. */
+  memset(&servAddr, 0, sizeof(servAddr));
+  servAddr.sin_family = AF_INET;
+  servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  servAddr.sin_port = htons(portno);
 
 
-	socklen_t serverLen = sizeof(serverAddr);
+// TIME MANAGEMENT.
+//=====================================================================================================
 
-	// Receive message. n = number of bits received.
-	ssize_t n = recvfrom(sockfd, (char *)buffer, MAXLINE,
-	 	MSG_WAITALL, (struct sockaddr *) &serverAddr, &serverLen); 
-	if(n < 0)
-	{
-		error("error receiving messages.");
-	}
-    buffer[n] = '\0'; 
-    printf("[Server]: %s\n", buffer); 
+  /* 
+  Prepare to setup a reoccurring event every 10s. If it_interval, or it_value is omitted,
+  it will be a single alarm 10s after it has been set. 
+  */
+  struct itimerval alarmTime;
+  /* Configure the timer to expire after 2 sec... */
+  alarmTime.it_interval.tv_sec = 2;
+  alarmTime.it_interval.tv_usec = 0;
+  alarmTime.it_value.tv_sec = 3;
+  alarmTime.it_value.tv_usec = 0;
+
+  //setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&alarmTime, sizeof(alarmTime));
+  //setsockopt (sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&alarmTime, sizeof(alarmTime));
+
+  /* Regiter a callback function, associated with the SIGALRM signal, 
+  which will be raised when the alarm goes of */
+  signal(SIGALRM, checkJobbList);
+  if( setitimer( ITIMER_REAL, &alarmTime, NULL ) != 0 )
+  printf( "failed to start timer\n" );
 
 
-    // Close socket.
-	close(sockfd);
+// LOOP
+//=====================================================================================================
+  while(isRunning)
+  {
+    /* Send calcMessage to the server. */
+    byteSent = sendto(sockfd, (const struct calcMessage *) &dataPacket, sizeof(dataPacket), 0, (const struct sockaddr*)&servAddr, sizeof(servAddr));
+    if (byteSent < 0) 
+    {
+      perror("sendto() sent a different number of bytes than expected.");
+    }             
+    printf("Packet [%d bytes] was sent to the server.\n", byteSent);
+    
 
-	return 0;
+    /* Receive from server. */
+    byteRcvd = recvfrom(sockfd, (char *)buffer, MAXLINE, 0, (struct sockaddr *) &servAddr, &serverLen); 
+	  if(byteRcvd < 0)
+    {
+      perror("recvfrom error");
+    }  
+    printf("Packet received.\n");
+
+
+  }
+
+
+  return 0;
 }

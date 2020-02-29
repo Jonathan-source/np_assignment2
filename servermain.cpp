@@ -15,153 +15,173 @@
 #define MAXLINE 1024
 
 using namespace std;
+
+
 /* Needs to be global, to be rechable by callback and main */
-int loopCount = 0;
-int terminate = 0;
+int loopCount=0;
+bool isRunning = true;
+
+
+
 
 /* Call back function, will be called when the SIGALRM is raised when the timer expires. */
-void checkJobbList(int signum)
-{
+void checkJobbList(int signum){
   // As anybody can call the handler, its good coding to check the signal number that called it.
-  printf("...waiting for messages...\n");
 
-  if(loopCount > 20)
-  {
-    printf("Shutting down.\n");
-    terminate = 1;
-  } 
+  printf("Let me be, I want to sleep.\n");
+
+  if(loopCount > 20) {
+    printf("I had enough.\n");
+    isRunning = false;
+  }
+  
   return;
 }
 
-// Function for handling errors.
-void error(char const * msg)
-{
-	perror(msg);
-	exit(EXIT_FAILURE);
-}
+
+
 
 
 int main(int argc, char *argv[])
 {
-	if(argc < 2)
+  
+  if(argc != 2)
 	{
-		error("error, arguments are missing");
+		perror("error, arguments are missing.");
 	}
+	unsigned short int SERVER_PORT = atoi(argv[1]);
 
+  // Initialize random values.
+	initCalcLib();
+
+// VARIABLES  
+//=====================================================================================================
 	int sockfd;
-	struct sockaddr_in serverAddr;
-	struct sockaddr_in clientAddr;
+	int bitSent = 0;
+  int bitRecv = 0;
 
-	char recvBuff[MAXLINE];
+	char buffer[MAXLINE];
+  char CLIENT_IP[MAXLINE];
+  char SERVER_IP[MAXLINE];
 
-	unsigned int SERVER_PORT = atoi(argv[1]);
-	unsigned int n = 0;
+	struct sockaddr_in servAddr;
+	struct sockaddr_in cliAddr;
+
+	// Holder for calcMessage.
+	calcMessage * temp = (calcMessage*)malloc(sizeof(struct calcMessage));
+
+	// calcProtocol.		
+	calcProtocol calcPrtc;	
+	memset(&calcPrtc, 0, sizeof(calcPrtc));
+	int calcPrtcSize = sizeof(calcPrtc);
 
 
-	/** socket(int domain, int type,int protocol) :
-	* Creates an endpoint for communication and returns a descriptor. 
-	* Returns a descriptor referencing the socket, or -1 if an error occurs.
-	**/ 
-	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+// UDP SOCKET.
+//=====================================================================================================
+	/* Create an UDP socket. */
+  sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sockfd < 0)
 	{
-		error("could not create socket.");
+		perror("could not create socket.");
 	}
-	printf("Socket was created, with file descriptor: %d\n", sockfd);
-	printf("Setting up server...\n");
+	printf("\n[+] Socket was created. File descriptor: %d\n", sockfd);
 
+	/* Fill in the server's address and data. */
+	memset(&servAddr, 0, sizeof(servAddr));  		
+	servAddr.sin_family = AF_INET;
+	servAddr.sin_port = htons(SERVER_PORT);				
+	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	// Fill the server address structure.
-	memset(&serverAddr, 0, sizeof(serverAddr));  		
+  memset(SERVER_IP, '\0', sizeof(SERVER_IP));
+  inet_ntop(AF_INET, &servAddr.sin_addr, SERVER_IP, sizeof(SERVER_IP));
 
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(SERVER_PORT);			// Convert to network byte order.
-	serverAddr.sin_addr.s_addr = INADDR_ANY; 			// "0.0.0.0". 
-
-
-	/** bind(int s, const struct sockaddr * name, socklen_t namelen ) :
-	* When a socket is created with socket(), it exists in a namespace (address family)
-	* but has no name assigned to it. The bind() function assigns a name to that unnamed socket. 
-	* Return 0 for success, -1 if an error occurs.
-	**/
-	int rc = bind(sockfd, (const struct sockaddr*)&serverAddr, sizeof(serverAddr));
-	if (rc < 0)
+  /* Bind socket to an address. */
+	int status = bind(sockfd, (struct sockaddr*)&servAddr, sizeof(servAddr));
+	if (status < 0)
 	{
-		error("failed to bind socket.");
+		perror("failed to bind socket.");
 	}
-	printf("...server setup complete.\nWaiting for message from remote clients ...\n");
+	printf("[+] Socket was successfully bound to %s:%d\n", SERVER_IP, SERVER_PORT);
+	printf("Waiting for messages from remote clients...\n\n");
 
+
+// TIME MANAGEMENT.
+//=====================================================================================================
 	/**
 	* Prepare to setup a reoccurring event every 10s. If it_interval, or it_value is omitted, 
 	* it will be a single alarm 10s after it has been set. 
-	**/
-	struct itimerval alarmTime;
+	*/
+	itimerval alarmTime;
+	/* Configure the timer to expire after 10 sec... */
 	alarmTime.it_interval.tv_sec = 10;
-	alarmTime.it_interval.tv_usec = 10;
+	alarmTime.it_interval.tv_usec = 0;
+	/* ... and every 10 sec after that. */
 	alarmTime.it_value.tv_sec = 10;
-	alarmTime.it_value.tv_usec = 10;
+	alarmTime.it_value.tv_usec = 0;
 
-	/**
-	* Regiter a callback function, associated with the SIGALRM signal, 
-	* which will be raised when the alarm goes of.
-	**/
 	signal(SIGALRM, checkJobbList);
 	setitimer(ITIMER_REAL,&alarmTime,NULL); // Start/register the alarm. 
 
 
 
-	// SERVER-LOOP
-  	while(terminate == 0)
-  	{
+// LOOP.
+//=====================================================================================================
+  while(isRunning)
+  {
+    memset(buffer, 0, sizeof(buffer));
+		memset(&cliAddr, 0, sizeof(cliAddr));
+		socklen_t cliLen = sizeof(cliAddr);
 
-	  	memset(recvBuff, 0, sizeof(recvBuff));
-		memset(&clientAddr, 0, sizeof(clientAddr));
-		socklen_t clientLen = sizeof(clientAddr);
-
-
-		/** recvfrom(int s,void * buff, size_t len, int flags, (struct sockaddr*)from, (socklen_t *)fromlen) :
-	  	* Receive a message from the socket whether or not it's connection-oriented. 
-	  	* If "from" is nonzero, and the socket is connectionless, the source address of the message is filled in. 
-	  	* If no messages are available at the socket, the receive call waits for a message to arrive.
-	  	* Returns the number of bytes received.
-	  	*/ 
-	  	if((n = recvfrom(sockfd, (char *)recvBuff, sizeof(recvBuff), 
-	  		0, (struct sockaddr*) &clientAddr, &clientLen)) < 0)
+    /* Receive from client */
+    bitRecv = recvfrom(sockfd, temp, sizeof(*temp), 0, (struct sockaddr*) &cliAddr, &cliLen);
+		if(bitRecv < 0)
 	  	{
-	  		error("error receiving message from the client.");
+	  		perror("error receiving message from the client.");
 	  	}
-	  	recvBuff[n];
+	  	printf("\nA message [%d bytes] was received...\n", bitRecv);
 
 
-	  	// Client information.
-	  	char clientIP[MAXLINE];
-	  	memset(clientIP, '\0', sizeof(clientIP));
+    // Client information.
+	  memset(CLIENT_IP, '\0', sizeof(CLIENT_IP));
+    if(inet_ntop(AF_INET, &cliAddr.sin_addr, CLIENT_IP, sizeof(CLIENT_IP)) == NULL)
+	  {																					
+	  		perror("inet_ntop failed.");
+	  }
+
+    // Print message.
+	  printf("...it was received from client %s:%d\n", CLIENT_IP, cliAddr.sin_port);
+	  printf("[%s:%d]: calcMessage { %d, %d, %d, %d, %d }\n\n", CLIENT_IP, cliAddr.sin_port, 
+	  			temp->type, temp->message, temp->protocol, temp->major_version, temp->minor_version);
 
 
-		/** inet_ntop(int af, const void * src, char * dst, socklen_t size ) :
-	  	* Converts a numeric network address pointed to by src into a text string
-	  	* in the buffer pointed to by dst. Returns a pointer to the buffer containing
-	  	* the text version of the address, or NULL if an error occurs.
-	  	*/
-	  	if(inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, sizeof(clientIP)) == NULL)
-	  	{																					
-	  		error("inet_ntop failed.");
+    // If the received calcMessage is correct, send the calcProtocol.
+    if(	temp->type 	== 22 &&
+	  		temp->message == 0 &&
+	  		temp->protocol == 17 &&
+	  		temp->major_version == 1 &&
+	  		temp->minor_version == 0)
+	  	{
+	  		bitSent = sendto(sockfd, (const struct calcProtocol *)&calcPrtc, sizeof(calcPrtc), 0, (const struct sockaddr *) &cliAddr, sizeof(cliAddr));
+	  		if(bitSent < 0)
+	  		{
+	  			perror("sendto() failed to execute."); 		
+	  		}	
+	  		printf("calcProtocol [%d bytes] were sent to the target client.\n", bitSent);
 	  	}
-	  	// Print message.
-	  	printf("\nReceived a message from client %s:%d\n", clientIP, clientAddr.sin_port);
-	  	printf("[%s:%d]: %s\n\n", clientIP, clientAddr.sin_port, recvBuff);
 
 
 
 
-	    sleep(1);
-	    loopCount++;
-  	}
-
-  	// Close socket
-  	close(sockfd);
+    printf("This is the main loop, %d time.\n",loopCount);
+    sleep(1);
+    loopCount++;
 
 
-  	printf("done.\n");
-  	return(0);
+  }
+
+  printf("done.\n");
+  return(0);
+
+
+  
 }
