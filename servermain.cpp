@@ -76,6 +76,7 @@ int main(int argc, char *argv[])
 	int calcPrtcSize = sizeof(calcPrtc);
 
 
+
 // UDP SOCKET.
 //=====================================================================================================
 	/* Create an UDP socket. */
@@ -103,6 +104,7 @@ int main(int argc, char *argv[])
 	}
 	printf("[+] Socket was successfully bound to %s:%d\n", SERVER_IP, SERVER_PORT);
 	printf("Waiting for messages from remote clients...\n\n");
+
 
 
 // TIME MANAGEMENT.
@@ -138,10 +140,8 @@ int main(int argc, char *argv[])
 	  	{
 	  		perror("error receiving message from the client.");
 	  	}
-	  	printf("\nA message [%d bytes] was received...\n", bitRecv);
 
-
-    // Client information.
+    // Client IP conversion.
 	  memset(CLIENT_IP, '\0', sizeof(CLIENT_IP));
     if(inet_ntop(AF_INET, &cliAddr.sin_addr, CLIENT_IP, sizeof(CLIENT_IP)) == NULL)
 	  {																					
@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
 	  }
 
     // Print message.
-	  printf("...it was received from client %s:%d\n", CLIENT_IP, cliAddr.sin_port);
+	  printf("A message [%d bytes] was received from client %s:%d\n", bitRecv, CLIENT_IP, cliAddr.sin_port);
 	  printf("[%s:%d]: calcMessage { %d, %d, %d, %d, %d }\n\n", CLIENT_IP, cliAddr.sin_port, 
 	  			temp->type, temp->message, temp->protocol, temp->major_version, temp->minor_version);
 
@@ -172,11 +172,11 @@ int main(int argc, char *argv[])
 
 
 
+
+
     printf("This is the main loop, %d time.\n",loopCount);
     sleep(1);
     loopCount++;
-
-
   }
 
   printf("done.\n");

@@ -70,6 +70,7 @@ int main(int argc, char *argv[])
   servAddr.sin_port = htons(portno);
 
 
+
 // TIME MANAGEMENT.
 //=====================================================================================================
 
@@ -92,6 +93,7 @@ int main(int argc, char *argv[])
   signal(SIGALRM, checkJobbList);
   if( setitimer( ITIMER_REAL, &alarmTime, NULL ) != 0 )
   printf( "failed to start timer\n" );
+
 
 
 // LOOP
