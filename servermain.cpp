@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
 //=====================================================================================================
   while(isRunning)
   {
-    memset(buffer, 0, sizeof(buffer));
+    //memset(buffer, 0, sizeof(buffer));
 		memset(&cliAddr, 0, sizeof(cliAddr));
 		socklen_t cliLen = sizeof(cliAddr);
 
@@ -155,6 +155,7 @@ int main(int argc, char *argv[])
 
 
     // If the received calcMessage is correct, send the calcProtocol.
+    // type=22, message=0, protocol=17, major_version=1,minor_version=0). 
     if(	temp->type 	== 22 &&
 	  		temp->message == 0 &&
 	  		temp->protocol == 17 &&
