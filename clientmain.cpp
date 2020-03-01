@@ -15,21 +15,8 @@
 
 #define MAXLINE 1024
 
-int loopCount = 0;
 int num_timeouts = 0;
 bool isRunning = true;
-
-
-/* Call back function, will be called when the SIGALRM is raised when the timer expires. */
-void checkJobbList(int signum)
-{ 
-  if(loopCount == 2){
-    isRunning = false;
-    return;
-  } 
-  loopCount++;
-  return;   /* An interrupter */
-}
 
 void timeout_handler(const char * msg);
 
@@ -38,23 +25,25 @@ int main(int argc, char *argv[])
 // VARIABLES  
 //=====================================================================================================
 
-  int currentState = 1;
-
   int sockfd;
   int portno = atoi(argv[1]);
   int byteRcvd = 0;
   int byteSent = 0;
   char *buffer[MAXLINE];
 
+  bool job_send_calcMessage = true;
+  bool job_calculate_calcProtocol = true;
+  bool job_send_calcProtocol = true;
+
   sockaddr_in servAddr;
   socklen_t servLen = sizeof(servAddr);
 
-  // type=22, message=0, protocol=17, major_version=1,minor_version=0).
+  // type = 22, message = 0, protocol = 17, major_version = 1, minor_version = 0).
   calcMessage dataPacket {22,0,17,1,0};
 
 	// Holder for calcMessage.
 	calcProtocol * temp = (calcProtocol*)malloc(sizeof(struct calcProtocol));
-  memset(&temp, 0, sizeof(temp));
+ 
 
 
 // UDP SOCKET
@@ -83,15 +72,18 @@ int main(int argc, char *argv[])
   Prepare to setup a reoccurring event every 10s. If it_interval, or it_value is omitted,
   it will be a single alarm 10s after it has been set. 
   */
-  struct itimerval alarmTime;
-  /* Configure the timer to expire after 2 sec... */
+  struct timeval alarmTime;
+  alarmTime.tv_sec = 2;
+  //Configure the timer to expire after 2 sec... 
+  /*
   alarmTime.it_interval.tv_sec = 2;
   alarmTime.it_interval.tv_usec = 0;
   alarmTime.it_value.tv_sec = 2;
   alarmTime.it_value.tv_usec = 0;
+  */
 
-  setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&alarmTime, sizeof(alarmTime));
-  setsockopt (sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&alarmTime, sizeof(alarmTime));
+  setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, &alarmTime, sizeof(alarmTime));
+  setsockopt (sockfd, SOL_SOCKET, SO_SNDTIMEO, &alarmTime, sizeof(alarmTime));
 
   /* Regiter a callback function, associated with the SIGALRM signal, 
   which will be raised when the alarm goes of */
@@ -104,49 +96,116 @@ int main(int argc, char *argv[])
 // LOOP
 //=====================================================================================================
 //=====================================================================================================
-  while(isRunning)
+  while(isRunning && num_timeouts < 3)
   {
-
-    // CALCMESSAGE
-    //=====================================================================================================
-
-    /* Send calcMessage to the server. */
-    byteSent = sendto(sockfd, (const struct calcMessage *) &dataPacket, sizeof(dataPacket), 0, (const struct sockaddr*)&servAddr, sizeof(servAddr));
-    if (byteSent < 0) 
+    if(job_send_calcMessage)
     {
-      perror("sendto() sent a different number of bytes than expected.");
-    } else            
+      // CALCMESSAGE
+      //=====================================================================================================
+      /**
+        * Send calcMessage to the server. Check what is being received. If it's a calcMessage (16 bits), shutdown program.
+        * Otherwise re-send the calcMessage every 2s if server does not reply. 
+        * End the program after 3 timeouts.
+        **/
+      // Send calcMessage: 
+      byteSent = sendto(sockfd, (const struct calcMessage *) &dataPacket, sizeof(dataPacket), 0, (const struct sockaddr*)&servAddr, sizeof(servAddr));
       printf("Packet [%d bytes] was sent to the server.\n", byteSent);
-    
+      // Receive calcProtocol:
+      byteRcvd = recvfrom(sockfd, temp, sizeof(*temp), 0, (struct sockaddr*) &servAddr, &servLen);
+      if (byteRcvd < 0) 
+      {
+        if (errno == EWOULDBLOCK) 
+        {
+          num_timeouts++;
+          fprintf(stderr, "socket timeout [%d].\n", num_timeouts);
+          continue;
+        } 
+        else
+            perror("recvfrom error");
+      }
+      else if (byteRcvd == 16){
+        printf("Server did not support the protocol.\n{type=2, message = 2, major_version=1,minor_version=0.}");
+        return EXIT_FAILURE;
+      }           
+      printf("A packet was received from the server:\n\n");
+      
+      printf("[calcProtocol]\n%d\n%fl\n%fl\n%d\n%d\n\n", 
+        temp->arith, temp->flValue1, temp->flValue2, temp->inValue1, temp->inValue2);
 
-    /* Receive from server. */
-    byteRcvd = recvfrom(sockfd, temp, sizeof(*temp), 0, (struct sockaddr*) &servAddr, &servLen);
-	  if(byteRcvd < 0)
-    {
-      timeout_handler("Resending segment.\n");
-    } 
-    else {
-      printf("Packet received.\n");
-
-    isRunning = false;
+      job_send_calcMessage = false;
     }
-    
-    // Send calcMessage.
-    //=====================================================================================================
+
+    if(job_calculate_calcProtocol)
+    {
+      switch(temp->arith)
+      {
+        case 0:
+          printf("Error: calcProtocol-->arith = 0.");
+          break;
+        case 1: 
+          temp->inResult =  temp->inValue1 + temp->inValue2;
+          break;
+        case 2:
+          temp->inResult = temp->inValue1 - temp->inValue2;
+          break;
+        case 3:
+          temp->inResult = temp->inValue1 * temp->inValue2;
+          break;
+        case 4:
+          temp->inResult = temp->inValue1 / temp->inValue2;
+          break;
+        case 5:
+          temp->flResult = temp->flValue1 + temp->flValue2;
+          break;
+        case 6:
+          temp->flResult = temp->flValue1 - temp->flValue2;
+          break;
+        case 7:
+          temp->flResult = temp->flValue1 * temp->flValue2;
+          break;
+        case 8:
+          temp->flResult = temp->flValue1 / temp->flValue2;
+        break;
+      }
+
+      if(temp->arith < 5)
+      {
+        printf("Calculation complete: %d\n\n", temp->inResult);
+      } else
+        printf("Calculation complete: %fl\n\n", temp->flResult); 
+
+      job_calculate_calcProtocol = false;
+    }
+
+    if(job_send_calcProtocol)
+    {
+    // Send calcProtocol: 
+    byteSent = sendto(sockfd, temp, sizeof(*temp), 0, (const struct sockaddr *) &servAddr, sizeof(servAddr));
+    printf("calcProtocol [%d bytes] was sent to the server.\n", byteSent);
+    // Receive calcMessage:
+    byteRcvd = recvfrom(sockfd, &dataPacket, sizeof(dataPacket), 0, (struct sockaddr*) &servAddr, &servLen);
+      if (byteRcvd < 0) 
+      {
+        if (errno == EWOULDBLOCK) 
+        {
+          num_timeouts++;
+          fprintf(stderr, "socket timeout [%d].\n", num_timeouts);
+          continue;
+        } 
+        else
+            perror("recvfrom error");
+      }           
+      printf("A packet was received from the server:\n");
+
+      printf("%d\n", dataPacket.message);
 
 
 
 
-
-
-
-
-
-
-
-
-
-
+      job_send_calcProtocol = false;
+    }
+    // Everything is done.
+    isRunning = false;
   }
 
   printf("Shutting down.\n");

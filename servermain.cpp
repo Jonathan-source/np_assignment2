@@ -58,11 +58,11 @@ int main(int argc, char *argv[])
 //=====================================================================================================
 	int sockfd;
 	int bitSent = 0;
-  int bitRecv = 0;
+  	int bitRecv = 0;
 
 	char buffer[MAXLINE];
-  char CLIENT_IP[MAXLINE];
-  char SERVER_IP[MAXLINE];
+  	char CLIENT_IP[MAXLINE];
+  	char SERVER_IP[MAXLINE];
 
 	struct sockaddr_in servAddr;
 	struct sockaddr_in cliAddr;
@@ -73,8 +73,11 @@ int main(int argc, char *argv[])
 	// calcProtocol.		
 	calcProtocol calcPrtc;	
 	memset(&calcPrtc, 0, sizeof(calcPrtc));
-	int calcPrtcSize = sizeof(calcPrtc);
-
+	
+	// Fill calcProtocol.
+	calcPrtc.arith = 3;
+	calcPrtc.inValue1 = 45;
+	calcPrtc.inValue2 = 123;
 
 
 // UDP SOCKET.
@@ -93,8 +96,8 @@ int main(int argc, char *argv[])
 	servAddr.sin_port = htons(SERVER_PORT);				
 	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-  memset(SERVER_IP, '\0', sizeof(SERVER_IP));
-  inet_ntop(AF_INET, &servAddr.sin_addr, SERVER_IP, sizeof(SERVER_IP));
+  	memset(SERVER_IP, '\0', sizeof(SERVER_IP));
+  	inet_ntop(AF_INET, &servAddr.sin_addr, SERVER_IP, sizeof(SERVER_IP));
 
   /* Bind socket to an address. */
 	int status = bind(sockfd, (struct sockaddr*)&servAddr, sizeof(servAddr));
@@ -142,7 +145,7 @@ int main(int argc, char *argv[])
 	  	}
 
     // Client IP conversion.
-	  memset(CLIENT_IP, '\0', sizeof(CLIENT_IP));
+	memset(CLIENT_IP, '\0', sizeof(CLIENT_IP));
     if(inet_ntop(AF_INET, &cliAddr.sin_addr, CLIENT_IP, sizeof(CLIENT_IP)) == NULL)
 	  {																					
 	  		perror("inet_ntop failed.");
@@ -155,7 +158,7 @@ int main(int argc, char *argv[])
 
 
     // If the received calcMessage is correct, send the calcProtocol.
-    // type=22, message=0, protocol=17, major_version=1,minor_version=0). 
+    // type = 22, message = 0, protocol = 17, major_version = 1, minor_version = 0). 
     if(	temp->type 	== 22 &&
 	  		temp->message == 0 &&
 	  		temp->protocol == 17 &&
@@ -170,8 +173,8 @@ int main(int argc, char *argv[])
 	  		printf("calcProtocol [%d bytes] were sent to the target client.\n", bitSent);
 	  	}
 
-
-
+	temp->message = 1;
+	bitSent = sendto(sockfd, temp, sizeof(*temp), 0, (const struct sockaddr*) &cliAddr, sizeof(cliAddr));	
 
 
 
