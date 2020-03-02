@@ -124,12 +124,12 @@ int main(int argc, char *argv[])
             perror("recvfrom error");
       }
       else if (byteRcvd == 16){
-        printf("Server did not support the protocol.\n{type=2, message = 2, major_version=1,minor_version=0.}");
+        printf("Server did not support the protocol.\n{type=2, message = 2, major_version=1,minor_version=0.}\n");
         return EXIT_FAILURE;
       }           
-      printf("A packet was received from the server:\n\n");
+      printf("A packet [%d bytes] was received from the server:\n\n", byteRcvd);
       
-      printf("[calcProtocol]\nArith:%d\nFloat1:%fl\nFloat2:%fl\nInt1:%d\nInt2:%d\n\n", 
+      printf("[calcProtocol]\nArith:%d\nFloat1:%lf\nFloat2:%lf\nInt1:%d\nInt2:%d\n\n", 
         temp->arith, temp->flValue1, temp->flValue2, temp->inValue1, temp->inValue2);
 
       job_send_calcMessage = false;
@@ -172,7 +172,7 @@ int main(int argc, char *argv[])
       {
         printf("Calculation complete: %d\n\n", temp->inResult);
       } else
-        printf("Calculation complete: %fl\n\n", temp->flResult); 
+        printf("Calculation complete: %lf\n\n", temp->flResult); 
 
       job_calculate_calcProtocol = false;
     }
@@ -198,9 +198,6 @@ int main(int argc, char *argv[])
       printf("A packet was received from the server:\n");
 
       printf("%d\n", dataPacket.message);
-
-
-
 
       job_send_calcProtocol = false;
     }
