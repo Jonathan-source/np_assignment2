@@ -18,7 +18,7 @@ using namespace std;
 
 
 /* Needs to be global, to be rechable by callback and main */
-int id = 1;
+int ID = 1;
 int loopCount = 0;
 bool isRunning = true;
 
@@ -52,7 +52,7 @@ struct node {
 void add_node(node * head, calcProtocol &calcProt, struct sockaddr_in &cliAddr);
 bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt);
 
-
+void printLinkedList(node * head);
 
 
 int main(int argc, char *argv[])
@@ -85,6 +85,7 @@ int main(int argc, char *argv[])
 	head.id = 0;
 	head.next = NULL;
 	calcProtocol calcProt;
+	calcMessage calcMsg;
 
 	// Holder for calcMessage.
 	calcMessage * p_calcMsg = (calcMessage*)malloc(sizeof(calcMessage));
@@ -149,10 +150,12 @@ int main(int argc, char *argv[])
 
 // LOOP.
 //=====================================================================================================
+//=====================================================================================================
   while(isRunning)
   {
 	memset(&packet, 0, sizeof(packet));
 	memset(&cliAddr, 0, sizeof(cliAddr));
+	memset(&calcMsg, 0, sizeof(calcMsg));
 	socklen_t cliLen = sizeof(cliAddr);
 
 	// Receive & identify packet.
@@ -186,11 +189,13 @@ int main(int argc, char *argv[])
 			calcProt.arith = randomType();
 			if(calcProt.arith < 5)
 			{
+				calcProt.id = ID++;
 				calcProt.inValue1 = randomInt();
 				calcProt.inValue2 = randomInt();
 			}
 			else
 			{
+				calcProt.id = ID++;
 				calcProt.flValue1 = randomFloat();
 				calcProt.flValue2 = randomFloat();
 			}
@@ -214,8 +219,9 @@ int main(int argc, char *argv[])
 			p_calcMsg->message = 2;
 			p_calcMsg->major_version = 1;
 			p_calcMsg->minor_version = 0;
+
 			byteSent = sendto(sockfd, p_calcMsg, sizeof(*p_calcMsg), 0, (const struct sockaddr *) &cliAddr, sizeof(cliAddr));
-			printf("[x] Not supported. calcMessage [%d bytes] were sent to %s:%d\n", byteSent, inet_ntoa(cliAddr.sin_addr), htons(cliAddr.sin_port));	
+			printf("[x] Protocol not supported. A calcMessage [%d bytes] were sent back to %s:%d\n", byteSent, inet_ntoa(cliAddr.sin_addr), htons(cliAddr.sin_port));	
 		}
 	}
 
@@ -227,38 +233,34 @@ int main(int argc, char *argv[])
 
 		// Search joblist, compare and check if everything is correct.
 		if(checkJob(&head, comprString, p_calcProt)){
-			printf("true\n)");
+			printf("OK.\n");
+			calcMsg.message = 1;
 		}
-		
-		/*
-  		calcProtoFromClient = (struct calcProtocol*)p_struct;
-      
-		if(findJobByID(&list1, *calcProtoFromClient, cliaddr))
-		{
-			calcMWrongProto->type = 2;
-			calcMWrongProto->message = 1;
-			struct calcMessage calcMToClient = *calcMWrongProto;
-			sendto(sockfd, (const struct calcMessage*) &calcMToClient, sizeof(calcMToClient), MSG_CONFIRM,(const struct sockaddr*) &cliaddr, sizeof(cliaddr));
-			printf("[x]Succesfully sent calcMessage back to client\n");
-		}
-		*/
+		else {
+			printf("NOT OK.\n");
+			calcMsg.message = 2;
+		} 
+		byteSent = sendto(sockfd, (const struct calcMessage *) &calcMsg, sizeof(calcMsg), 0, (const struct sockaddr*)&cliAddr, sizeof(cliAddr));
+   		printf("calcMessage [%d bytes] was sent to the server.\n", byteSent);
+
 	}
-/*
 
-	temp->message = 1;
-	bitSent = sendto(sockfd, temp, sizeof(*temp), 0, (const struct sockaddr*) &cliAddr, sizeof(cliAddr));	
-
-*/
-
-    printf("This is the main loop, %d time.\n",loopCount);
+    printf("==========================================================\n");
+	printLinkedList(&head);
+	printf("==========================================================\n");
     sleep(1);
     loopCount++;
   }
 
-  printf("done.\n");
+
+
+  printf("Shutdown.\n");
   return(0);
-  
 }
+
+
+
+
 
 void add_node(node * head, calcProtocol &calcProt, struct sockaddr_in &cliAddr)
 {
@@ -270,7 +272,8 @@ void add_node(node * head, calcProtocol &calcProt, struct sockaddr_in &cliAddr)
     current->next = (node *) malloc(sizeof(node));
 
 	sprintf(current->next->clientstring, "%s:%d", inet_ntoa(cliAddr.sin_addr), htons(cliAddr.sin_port));
-	current->next->id = id++;
+
+	current->next->id = calcProt.id;
 	current->next->arith = calcProt.arith;
 	current->next->inVal1 = calcProt.inValue1;
 	current->next->inVal2 = calcProt.inValue2;
@@ -296,13 +299,13 @@ void add_node(node * head, calcProtocol &calcProt, struct sockaddr_in &cliAddr)
 				current->next->iResult = current->next->inVal1 / current->next->inVal2;
 				break;
 			case 5:
-				current->next->fResult = current->next->flVal1 / current->next->flVal2;
+				current->next->fResult = current->next->flVal1 + current->next->flVal2;
 				break;
 			case 6:
-				current->next->fResult = current->next->flVal1 / current->next->flVal2;
+				current->next->fResult = current->next->flVal1 - current->next->flVal2;
 				break;
 			case 7:
-				current->next->fResult = current->next->flVal1 / current->next->flVal2;
+				current->next->fResult = current->next->flVal1 * current->next->flVal2;
 				break;
 			case 8:
 				current->next->fResult = current->next->flVal1 / current->next->flVal2;
@@ -326,29 +329,47 @@ bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt)
 	bool isCorrect = false;
 	bool isHacker = false;
 
+	int dDelta = 0;
+	double dEpsilon = 0.0001;
+
+	// Search ID
 	while (isSearching) 
-	{
-		if(current->id == id){
+	{	
+		printf("%d == %d\n", current->id, p_calcProt->id);
+		if(current->id == p_calcProt->id){
 			isSearching = false;
 			hasFound = true;
 		}
 		else if(current->next == NULL){
 			isSearching = false;
 		}
+		else {
         current = current->next;
+		}
     }
 
+	// ID found
 	if(hasFound)
-	{
+	{	
+		// Check client data match
+		printf("%s == %s\n", current->clientstring, Iaddress);
 		if(strcmp(current->clientstring, Iaddress) == 0)
 		{
+			// Compare result
 			if(current->arith < 5) {
+				printf("%d %d\n", current->iResult, p_calcProt->inResult);
 				if(current->iResult == p_calcProt->inResult){
 					isCorrect = true;
 				}
 			}
 			else {
-				if(current->fResult == p_calcProt->flResult){
+				dDelta = (current->fResult - p_calcProt->flResult);
+				if(dDelta < 0) {
+					dDelta *= -1.0;
+				} 
+				if (dDelta <= dEpsilon)
+				{
+					printf("%lf %lf\n", current->fResult, p_calcProt->flResult);
 					isCorrect = true;
 				}
 			}
@@ -360,4 +381,14 @@ bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt)
 	}
 
 	return isCorrect;
+}
+
+
+void printLinkedList(node * head)
+{
+	node * current = head;
+	while (current->next != NULL) {
+		current = current->next;
+		printf("%d %d %d %lf %lf %s\n", current->id, current->inVal1, current->inVal2, current->flVal1, current->flVal2, current->clientstring);
+    }	
 }
