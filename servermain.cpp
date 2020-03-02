@@ -38,7 +38,7 @@ void checkJobbList(int signum){
 
 struct node {
 	char clientstring[200];	// Lagra client IP och port i en sträng här., sprintf(array, "%s:%d", clientipaddress,clientport))
-	int id; 
+	unsigned int id; 
 	int arith;
 	int inVal1, inVal2;
 	int iResult;
@@ -50,7 +50,7 @@ struct node {
 
 // Linked List Functions
 void add_node(node * head, calcProtocol &calcProt, struct sockaddr_in &cliAddr);
-bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt);
+void checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt, calcMessage &calcMsg);
 
 void printLinkedList(node * head);
 
@@ -73,7 +73,6 @@ int main(int argc, char *argv[])
 	int byteSent = 0;
   	int byteRcvd = 0;
 
-  	char SERVER_IP[MAXLINE];
 	char comprString[200];
 	char *packet;
 
@@ -115,16 +114,13 @@ int main(int argc, char *argv[])
 	servAddr.sin_port = htons(SERVER_PORT);				
 	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-  	memset(SERVER_IP, '\0', sizeof(SERVER_IP));
-  	inet_ntop(AF_INET, &servAddr.sin_addr, SERVER_IP, sizeof(SERVER_IP));
-
   	/* Bind socket to an address. */
 	int status = bind(sockfd, (struct sockaddr*)&servAddr, sizeof(servAddr));
 	if (status < 0)
 	{
 		perror("failed to bind socket.");
 	}
-	printf("[+] Socket was successfully bound to %s:%d\n", SERVER_IP, SERVER_PORT);
+	printf("[+] Socket was successfully bound to %s:%d\n", inet_ntoa(servAddr.sin_addr), SERVER_PORT);
 	printf("=== Waiting for messages from remote clients ===\n");
 
 
@@ -232,22 +228,12 @@ int main(int argc, char *argv[])
 		sprintf(comprString, "%s:%d", inet_ntoa(cliAddr.sin_addr), htons(cliAddr.sin_port));
 
 		// Search joblist, compare and check if everything is correct.
-		if(checkJob(&head, comprString, p_calcProt)){
-			printf("OK.\n");
-			calcMsg.message = 1;
-		}
-		else {
-			printf("NOT OK.\n");
-			calcMsg.message = 2;
-		} 
+		checkJob(&head, comprString, p_calcProt, calcMsg);
 		byteSent = sendto(sockfd, (const struct calcMessage *) &calcMsg, sizeof(calcMsg), 0, (const struct sockaddr*)&cliAddr, sizeof(cliAddr));
-   		printf("calcMessage [%d bytes] was sent to the server.\n", byteSent);
+   		printf("[x] calcMessage [%d bytes] was sent to the server.\n", byteSent);
 
 	}
 
-    printf("==========================================================\n");
-	printLinkedList(&head);
-	printf("==========================================================\n");
     sleep(1);
     loopCount++;
   }
@@ -257,7 +243,6 @@ int main(int argc, char *argv[])
   printf("Shutdown.\n");
   return(0);
 }
-
 
 
 
@@ -320,14 +305,12 @@ void add_node(node * head, calcProtocol &calcProt, struct sockaddr_in &cliAddr)
 
 
 
-bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt)
+void checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt, calcMessage &calcMsg)
 {
 	node * current = head;
 
 	bool isSearching = true;
 	bool hasFound = false;
-	bool isCorrect = false;
-	bool isHacker = false;
 
 	int dDelta = 0;
 	double dEpsilon = 0.0001;
@@ -335,7 +318,6 @@ bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt)
 	// Search ID
 	while (isSearching) 
 	{	
-		printf("%d == %d\n", current->id, p_calcProt->id);
 		if(current->id == p_calcProt->id){
 			isSearching = false;
 			hasFound = true;
@@ -352,15 +334,16 @@ bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt)
 	if(hasFound)
 	{	
 		// Check client data match
-		printf("%s == %s\n", current->clientstring, Iaddress);
 		if(strcmp(current->clientstring, Iaddress) == 0)
 		{
 			// Compare result
 			if(current->arith < 5) {
-				printf("%d %d\n", current->iResult, p_calcProt->inResult);
-				if(current->iResult == p_calcProt->inResult){
-					isCorrect = true;
-				}
+				if(current->iResult == p_calcProt->inResult)
+				{
+					calcMsg.message = 1;
+				} 
+				else
+					calcMsg.message = 2;
 			}
 			else {
 				dDelta = (current->fResult - p_calcProt->flResult);
@@ -369,26 +352,29 @@ bool checkJob(node * head, const char *Iaddress, calcProtocol * p_calcProt)
 				} 
 				if (dDelta <= dEpsilon)
 				{
-					printf("%lf %lf\n", current->fResult, p_calcProt->flResult);
-					isCorrect = true;
+					calcMsg.message = 1;
 				}
+				else
+					calcMsg.message = 2;
 			}
+			calcMsg.type = 2;
 		} 
 		else {
-			isHacker = true;
 			printf("Warning: %s might be a hacker!\n", Iaddress);
+			calcMsg.type = 3;
+			calcMsg.message = 2; 
 		}
 	}
-
-	return isCorrect;
 }
 
-
+/* Debugging */
 void printLinkedList(node * head)
 {
+	printf("==========================================================\n");
 	node * current = head;
 	while (current->next != NULL) {
 		current = current->next;
 		printf("%d %d %d %lf %lf %s\n", current->id, current->inVal1, current->inVal2, current->flVal1, current->flVal2, current->clientstring);
     }	
+	printf("==========================================================\n");
 }

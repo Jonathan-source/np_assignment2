@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
         **/
       // Send calcMessage: 
       byteSent = sendto(sockfd, (const struct calcMessage *) &dataPacket, sizeof(dataPacket), 0, (const struct sockaddr*)&servAddr, sizeof(servAddr));
-      printf("Packet [%d bytes] was sent to the server.\n", byteSent);
+      printf("[x] calcMessage [%d bytes] was sent to the server.\n", byteSent);
       // Receive calcProtocol:
       byteRcvd = recvfrom(sockfd, temp, sizeof(*temp), 0, (struct sockaddr*) &servAddr, &servLen);
       if (byteRcvd < 0) 
@@ -124,10 +124,10 @@ int main(int argc, char *argv[])
             perror("recvfrom error");
       }
       else if (byteRcvd == 16){
-        printf("Server did not support the protocol.\n{type=2, message = 2, major_version=1,minor_version=0.}\n");
+        printf("[-] Server did not support the protocol.\n");
         return EXIT_FAILURE;
       }           
-      printf("A packet [%d bytes] was received from the server:\n\n", byteRcvd);
+      printf("[x] calcProtocol [%d bytes] was received from the server:\n\n", byteRcvd);
       
       printf("[calcProtocol]\nArith:%d\nFloat1:%lf\nFloat2:%lf\nInt1:%d\nInt2:%d\n\n", 
         temp->arith, temp->flValue1, temp->flValue2, temp->inValue1, temp->inValue2);
@@ -170,9 +170,9 @@ int main(int argc, char *argv[])
 
       if(temp->arith < 5)
       {
-        printf("Calculation complete: %d\n\n", temp->inResult);
+        printf("[x] Calculation complete: %d\n", temp->inResult);
       } else
-        printf("Calculation complete: %lf\n\n", temp->flResult); 
+        printf("[x] Calculation complete: %lf\n", temp->flResult); 
 
       job_calculate_calcProtocol = false;
     }
@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
     {
     // Send calcProtocol: 
     byteSent = sendto(sockfd, temp, sizeof(*temp), 0, (const struct sockaddr *) &servAddr, sizeof(servAddr));
-    printf("calcProtocol [%d bytes] was sent to the server.\n", byteSent);
+    printf("[x] calcProtocol [%d bytes] was sent to the server.\n", byteSent);
     // Receive calcMessage:
     byteRcvd = recvfrom(sockfd, &dataPacket, sizeof(dataPacket), 0, (struct sockaddr*) &servAddr, &servLen);
       if (byteRcvd < 0) 
@@ -195,9 +195,8 @@ int main(int argc, char *argv[])
         else
             perror("recvfrom error");
       }           
-      printf("A packet was received from the server:\n");
-
-      printf("%d\n", dataPacket.message);
+      printf("[x] calcMessage [%d bytes] was received from the server. calcMessage type = %d, message = %d.\n", byteRcvd, 
+          dataPacket.type, dataPacket.message);
 
       job_send_calcProtocol = false;
     }
@@ -207,19 +206,4 @@ int main(int argc, char *argv[])
 
   printf("Shutting down.\n");
   return 0;
-}
-
-
-void timeout_handler(const char * msg)
-{
-  if(num_timeouts > 2)
-  {
-    printf("No respons from the server after %d attempts resending the segment.\n", num_timeouts);
-    isRunning = false;
-  }
-  else {
-  // Timeout reached
-    printf("Timout reached. %s\n", msg);
-    num_timeouts++;
-  }
 }
