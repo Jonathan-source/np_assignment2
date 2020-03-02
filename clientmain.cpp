@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
       }           
       printf("A packet was received from the server:\n\n");
       
-      printf("[calcProtocol]\n%d\n%fl\n%fl\n%d\n%d\n\n", 
+      printf("[calcProtocol]\nArith:%d\nFloat1:%fl\nFloat2:%fl\nInt1:%d\nInt2:%d\n\n", 
         temp->arith, temp->flValue1, temp->flValue2, temp->inValue1, temp->inValue2);
 
       job_send_calcMessage = false;

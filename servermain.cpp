@@ -17,9 +17,27 @@
 using namespace std;
 
 
+
+struct node {
+	char clientstring[200];	// Lagra client IP och port i en sträng här., sprintf(array, "%s:%d", clientipaddress,clientport))
+	int id; 
+	char *operation;
+	int inVal1, inVal2;
+	float flVal1,flVal2;
+	struct timeval lastMessage;
+	struct node * next;
+};
+
+
+
+
+
 /* Needs to be global, to be rechable by callback and main */
 int loopCount=0;
 bool isRunning = true;
+
+
+
 
 
 
@@ -60,7 +78,6 @@ int main(int argc, char *argv[])
 	int bitSent = 0;
   	int bitRecv = 0;
 
-	char buffer[MAXLINE];
   	char CLIENT_IP[MAXLINE];
   	char SERVER_IP[MAXLINE];
 
@@ -68,16 +85,15 @@ int main(int argc, char *argv[])
 	struct sockaddr_in cliAddr;
 
 	// Holder for calcMessage.
-	calcMessage * temp = (calcMessage*)malloc(sizeof(struct calcMessage));
+	calcMessage * p_calcMsg = (calcMessage*)malloc(sizeof(calcMessage));
 
-	// calcProtocol.		
-	calcProtocol calcPrtc;	
-	memset(&calcPrtc, 0, sizeof(calcPrtc));
+	// calcProtocol.			
+	calcProtocol * p_calcProt = (calcProtocol*)malloc(sizeof(calcProtocol));
+
+	// Flexible pointer
+	void* p_struct = malloc(sizeof(calcProtocol));
 	
-	// Fill calcProtocol.
-	calcPrtc.arith = 3;
-	calcPrtc.inValue1 = 45;
-	calcPrtc.inValue2 = 123;
+
 
 
 // UDP SOCKET.
@@ -133,50 +149,76 @@ int main(int argc, char *argv[])
 //=====================================================================================================
   while(isRunning)
   {
-    //memset(buffer, 0, sizeof(buffer));
-		memset(&cliAddr, 0, sizeof(cliAddr));
-		socklen_t cliLen = sizeof(cliAddr);
+	memset(&cliAddr, 0, sizeof(cliAddr));
+	socklen_t cliLen = sizeof(cliAddr);
 
-    /* Receive from client */
-    bitRecv = recvfrom(sockfd, temp, sizeof(*temp), 0, (struct sockaddr*) &cliAddr, &cliLen);
-		if(bitRecv < 0)
-	  	{
-	  		perror("error receiving message from the client.");
-	  	}
+
+	bitRecv = recvfrom(sockfd, (void*) p_struct, MAXLINE, 0, (struct sockaddr *) &cliAddr, &cliLen);
+	if(bitRecv < 0)
+	{
+	  	perror("error receiving message from the client.");
+	}
+	else if(bitRecv == 16)
+	{
+		p_calcMsg = (struct calcMessage*)p_struct;
+	}
+	else if(bitRecv == 56)
+	{
+		p_calcProt = (struct calcProtocol*)p_struct;
+	}
 
     // Client IP conversion.
 	memset(CLIENT_IP, '\0', sizeof(CLIENT_IP));
     if(inet_ntop(AF_INET, &cliAddr.sin_addr, CLIENT_IP, sizeof(CLIENT_IP)) == NULL)
-	  {																					
-	  		perror("inet_ntop failed.");
-	  }
+	{																					
+	  	perror("inet_ntop failed.");
+	}
 
     // Print message.
-	  printf("A message [%d bytes] was received from client %s:%d\n", bitRecv, CLIENT_IP, cliAddr.sin_port);
-	  printf("[%s:%d]: calcMessage { %d, %d, %d, %d, %d }\n\n", CLIENT_IP, cliAddr.sin_port, 
-	  			temp->type, temp->message, temp->protocol, temp->major_version, temp->minor_version);
+	printf("A message [%d bytes] was received from client %s:%d\n", bitRecv, CLIENT_IP, cliAddr.sin_port);
 
 
     // If the received calcMessage is correct, send the calcProtocol.
     // type = 22, message = 0, protocol = 17, major_version = 1, minor_version = 0). 
-    if(	temp->type 	== 22 &&
-	  		temp->message == 0 &&
-	  		temp->protocol == 17 &&
-	  		temp->major_version == 1 &&
-	  		temp->minor_version == 0)
+    if(	p_calcMsg->type == 22 &&
+	  	p_calcMsg->message == 0 &&
+	  	p_calcMsg->protocol == 17 &&
+	  	p_calcMsg->major_version == 1 &&
+	  	p_calcMsg->minor_version == 0)
+	{
+		p_calcProt->arith = randomType();
+		if(p_calcProt->arith < 5)
+		{
+			p_calcProt->inValue1 = randomInt();
+			p_calcProt->inValue2 = randomInt();
+		}
+		else
+		{
+			p_calcProt->flValue1 = randomFloat();
+			p_calcProt->flValue2 = randomFloat();
+		}
+
+	  	bitSent = sendto(sockfd, p_calcProt, sizeof(*p_calcProt), 0, (const struct sockaddr *) &cliAddr, sizeof(cliAddr));
+	  	if(bitSent < 0)
 	  	{
-	  		bitSent = sendto(sockfd, (const struct calcProtocol *)&calcPrtc, sizeof(calcPrtc), 0, (const struct sockaddr *) &cliAddr, sizeof(cliAddr));
-	  		if(bitSent < 0)
-	  		{
-	  			perror("sendto() failed to execute."); 		
-	  		}	
-	  		printf("calcProtocol [%d bytes] were sent to the target client.\n", bitSent);
-	  	}
+	  		perror("sendto() failed to execute."); 		
+	  	}	
+	  	printf("calcProtocol [%d bytes] were sent to the target client.\n", bitSent);
+	}
+/*
+	//////////////////////////////
+	// HÄR SPARAS CLIENTS.
+	/////////////////////////////
+
+
+
+
+
 
 	temp->message = 1;
 	bitSent = sendto(sockfd, temp, sizeof(*temp), 0, (const struct sockaddr*) &cliAddr, sizeof(cliAddr));	
 
-
+*/
 
     printf("This is the main loop, %d time.\n",loopCount);
     sleep(1);
@@ -189,3 +231,25 @@ int main(int argc, char *argv[])
 
   
 }
+
+void push(node * head)
+{
+	node * current = head;
+	while (current->next != NULL) {
+        current = current->next;
+    }
+	/* now we can add a new variable */
+    current->next = (node *) malloc(sizeof(node));
+
+	//sprintf(current->next->clientstring, "%s:%d", inet_ntoa(cliAddr.sin_addr), htons(cliAddr.sin_port));
+	current->next->id;
+	current->next->operation;
+	current->next->inVal1;
+	current->next->inVal2;
+	current->next->flVal1;
+	current->next->flVal2;
+	gettimeofday(&current->next->lastMessage, NULL);
+
+    current->next->next = NULL;
+}
+
